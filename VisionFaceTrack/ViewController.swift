@@ -322,24 +322,93 @@ class ViewController: UIViewController {
     
     // Interpret the output of our facial landmark detector
     // this code is called upon succesful completion of landmark detection
-    func landmarksCompletionHandler(request:VNRequest, error:Error?){
-        
-        if error != nil {
-            print("FaceLandmarks error: \(String(describing: error)).")
-        }
-        
-        // any landmarks found that we can display? If not, return
-        guard let landmarksRequest = request as? VNDetectFaceLandmarksRequest,
-              let results = landmarksRequest.results as? [VNFaceObservation] else {
+    func landmarksCompletionHandler(request: VNRequest, error: Error?) {
+        // 检查是否有错误
+        if let error = error {
+            print("FaceLandmarks error: \(error.localizedDescription)")
             return
         }
         
-        // Perform all UI updates (drawing) on the main queue, not the background queue on which this handler is being called.
+        // 验证请求和结果类型是否正确
+        guard let landmarksRequest = request as? VNDetectFaceLandmarksRequest,
+              let results = landmarksRequest.results else {
+            return
+        }
+        
+        // 在主线程更新UI
         DispatchQueue.main.async {
-            // draw the landmarks using core animation layers
+            // 绘制面部特征
             self.drawFaceObservations(results)
+            
+            // 对每个检测到的脸部进行微笑检测
+            for faceObservation in results {
+                if self.isSmiling(faceObservation) {
+                    // 显示微笑检测的UI反馈
+                    self.showSmileDetectedUI()
+                }
+            }
         }
     }
+
+    // 新增微笑检测方法
+    private func isSmiling(_ faceObservation: VNFaceObservation) -> Bool {
+        guard let landmarks = faceObservation.landmarks,
+              let outerLips = landmarks.outerLips else {
+            return false
+        }
+        
+        // 获取左嘴角和右嘴角的坐标
+        let leftMouthCorner = outerLips.normalizedPoints.first
+        let rightMouthCorner = outerLips.normalizedPoints.last
+        
+        // 获取上嘴唇的中间点
+        let upperLipTop = outerLips.normalizedPoints[outerLips.pointCount / 2]
+        
+        guard let leftMouthCorner = leftMouthCorner,
+              let rightMouthCorner = rightMouthCorner else {
+            return false
+        }
+        
+        // 计算嘴的宽度和高度比例，判断是否微笑
+        let mouthWidth = self.distance(from: leftMouthCorner, to: rightMouthCorner)
+        let mouthHeight = self.distance(from: upperLipTop, to: leftMouthCorner)
+        
+        // 定义微笑阈值，当嘴巴高度与宽度的比率大于0.3时，认为是微笑
+        return mouthHeight / mouthWidth > 0.3
+    }
+
+    // 计算两点之间的距离
+    private func distance(from point1: CGPoint, to point2: CGPoint) -> CGFloat {
+        return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2))
+    }
+
+    // 显示微笑检测的UI反馈
+    private func showSmileDetectedUI() {
+        self.view.backgroundColor = UIColor.yellow.withAlphaComponent(0.3)
+        
+        // 笑脸提示标签
+        let smileLabel = UILabel()
+        smileLabel.text = "😊 微笑检测成功！"
+        smileLabel.textColor = .blue
+        smileLabel.font = UIFont.boldSystemFont(ofSize: 24)
+        smileLabel.textAlignment = .center
+        smileLabel.frame = CGRect(x: 0, y: 0, width: 200, height: 50)
+        smileLabel.center = self.view.center
+        
+        self.view.addSubview(smileLabel)
+        
+        // 延迟移除提示标签和恢复背景颜色
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            smileLabel.removeFromSuperview()
+            self.view.backgroundColor = UIColor.clear
+        }
+    }
+
+
+//    func distance(from point1: CGPoint, to point2: CGPoint) -> CGFloat {
+//        return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2))
+//    }
+
     
     
 }
