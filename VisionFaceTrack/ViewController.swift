@@ -319,11 +319,12 @@ class ViewController: UIViewController {
         }
     }
     
-    // 当前皱眉状态，防止重复触发
+    // Current frown status to prevent repeated triggers
     private var isCurrentlyFrowning = false
-    // 用于连续检测计数
+    // Count for continuous detection
     private var frownFrameCount = 0
-    private let requiredFrownFrames = 3  // 需要连续检测到3帧皱眉
+    private let requiredFrownFrames = 3  // Need 3 continuous frames to detect a frown
+    private var nonFrowningFrameCount = 0
 
     private func updateFrownStatus(_ faceObservation: VNFaceObservation) {
         let frowningDetected = isFrowning(faceObservation)
@@ -334,12 +335,12 @@ class ViewController: UIViewController {
             frownFrameCount = 0
         }
         
-        // 仅在未处于皱眉状态且满足连续皱眉帧数时才更新UI
+        // Update the UI only when not currently frowning and the required number of frowning frames is met
         if frowningDetected && !isCurrentlyFrowning && frownFrameCount >= requiredFrownFrames {
             isCurrentlyFrowning = true
             showFrownDetectedUI()
         } else if !frowningDetected && isCurrentlyFrowning {
-            // 如果检测到从皱眉状态恢复
+            // If the frowning status is detected to have ended
             isCurrentlyFrowning = false
         }
     }
@@ -348,35 +349,31 @@ class ViewController: UIViewController {
     // Interpret the output of our facial landmark detector
     // this code is called upon succesful completion of landmark detection
     func landmarksCompletionHandler(request: VNRequest, error: Error?) {
-        // 检查是否有错误
+        // Check for errors
         if let error = error {
             print("FaceLandmarks error: \(error.localizedDescription)")
             return
         }
         
-        // 验证请求和结果类型是否正确
+        // Validate the request and result types
         guard let landmarksRequest = request as? VNDetectFaceLandmarksRequest,
               let results = landmarksRequest.results else {
             return
         }
         
-        // 在主线程更新UI
+        // Update the UI on the main thread
         DispatchQueue.main.async {
-            // 绘制面部特征
+            // Draw facial features
             self.drawFaceObservations(results)
             
-            // 仅在满足连续条件时更新 UI
+            // Update the UI only if the conditions are met
             for faceObservation in results {
                 self.updateFrownStatus(faceObservation)
-//                if self.isFrowning(faceObservation) {
-//                    // 显示皱眉检测的UI反馈
-//                    self.showFrownDetectedUI()
-//                }
             }
         }
     }
 
-    // 新增皱眉检测方法
+    // New method for detecting a frown
     private func isFrowning(_ faceObservation: VNFaceObservation) -> Bool {
         guard let landmarks = faceObservation.landmarks,
               let outerLips = landmarks.outerLips else {
@@ -392,13 +389,13 @@ class ViewController: UIViewController {
             return false
         }
 
-        // 计算嘴角的平均高度
+        // Calculate the average height of the mouth corners
         let averageMouthCornerHeight = (leftMouthCorner.y + rightMouthCorner.y) / 2.0
-        // 计算上唇与嘴角的高度差
+        // Calculate the height difference between the upper lip and mouth corners
         let heightDifference = upperLipTop.y - averageMouthCornerHeight
 
-        // 设置皱眉的高度差阈值
-        let frownHeightThreshold: CGFloat = -0.05 // 根据实际情况调整
+        // Set the threshold for the height difference to detect a frown
+        let frownHeightThreshold: CGFloat = -0.06 // Adjust based on actual testing
         
         print("Upper Lip Height: \(upperLipTop.y), Average Mouth Corner Height: \(averageMouthCornerHeight), Height Difference: \(heightDifference)")
 
@@ -406,16 +403,16 @@ class ViewController: UIViewController {
     }
 
 
-    // 计算两点之间的距离
+    // Calculate the distance between two points
     private func distance(from point1: CGPoint, to point2: CGPoint) -> CGFloat {
         return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2))
     }
 
-    // 显示皱眉检测的UI反馈
+    // Show the UI feedback for frown detection
     private func showFrownDetectedUI() {
         self.view.backgroundColor = UIColor.yellow.withAlphaComponent(0.3)
         
-        // 皱眉提示标签
+        // Frown detection label
         let frownLabel = UILabel()
         frownLabel.text = "😠 Frowning Detected！"
         frownLabel.textColor = .blue
@@ -426,11 +423,11 @@ class ViewController: UIViewController {
         
         self.view.addSubview(frownLabel)
         
-        // 延迟移除提示标签和恢复背景颜色
+        // Delay the removal of the label and reset background color
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             frownLabel.removeFromSuperview()
             self.view.backgroundColor = UIColor.clear
-            self.isCurrentlyFrowning = false // 重置状态以允许再次检测
+            self.isCurrentlyFrowning = false // Reset state to allow detection again
         }
     }
 
@@ -618,7 +615,6 @@ extension ViewController:AVCaptureVideoDataOutputSampleBufferDelegate{
     }
 }
 
-
 // MARK: Extension Drawing Vision Observations
 extension ViewController {
     
@@ -803,6 +799,18 @@ extension ViewController {
         
         faceRectangleShapeLayer.path = faceRectanglePath
         faceLandmarksShapeLayer.path = faceLandmarksPath
+
+        // Change the color based on isCurrentlyFrowning
+        if isCurrentlyFrowning {
+            nonFrowningFrameCount = 0  // Reset count
+        } else {
+            nonFrowningFrameCount += 1
+        }
+        
+        // Change the color to green only when nonFrowningFrameCount lasts more than 2
+        let overlayColor: UIColor = (nonFrowningFrameCount > 2) ? .green : .red
+        faceRectangleShapeLayer.strokeColor = overlayColor.cgColor
+        faceLandmarksShapeLayer.strokeColor = overlayColor.cgColor
         
         self.updateLayerGeometry()
         
