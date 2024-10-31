@@ -319,6 +319,31 @@ class ViewController: UIViewController {
         }
     }
     
+    // 当前皱眉状态，防止重复触发
+    private var isCurrentlyFrowning = false
+    // 用于连续检测计数
+    private var frownFrameCount = 0
+    private let requiredFrownFrames = 3  // 需要连续检测到3帧皱眉
+
+    private func updateFrownStatus(_ faceObservation: VNFaceObservation) {
+        let frowningDetected = isFrowning(faceObservation)
+
+        if frowningDetected {
+            frownFrameCount += 1
+        } else {
+            frownFrameCount = 0
+        }
+        
+        // 仅在未处于皱眉状态且满足连续皱眉帧数时才更新UI
+        if frowningDetected && !isCurrentlyFrowning && frownFrameCount >= requiredFrownFrames {
+            isCurrentlyFrowning = true
+            showFrownDetectedUI()
+        } else if !frowningDetected && isCurrentlyFrowning {
+            // 如果检测到从皱眉状态恢复
+            isCurrentlyFrowning = false
+        }
+    }
+    
     
     // Interpret the output of our facial landmark detector
     // this code is called upon succesful completion of landmark detection
@@ -340,18 +365,19 @@ class ViewController: UIViewController {
             // 绘制面部特征
             self.drawFaceObservations(results)
             
-            // 对每个检测到的脸部进行微笑检测
+            // 仅在满足连续条件时更新 UI
             for faceObservation in results {
-                if self.isSmiling(faceObservation) {
-                    // 显示微笑检测的UI反馈
-                    self.showSmileDetectedUI()
-                }
+                self.updateFrownStatus(faceObservation)
+//                if self.isFrowning(faceObservation) {
+//                    // 显示皱眉检测的UI反馈
+//                    self.showFrownDetectedUI()
+//                }
             }
         }
     }
 
-    // 新增微笑检测方法
-    private func isSmiling(_ faceObservation: VNFaceObservation) -> Bool {
+    // 新增皱眉检测方法
+    private func isFrowning(_ faceObservation: VNFaceObservation) -> Bool {
         guard let landmarks = faceObservation.landmarks,
               let outerLips = landmarks.outerLips else {
             return false
@@ -369,12 +395,16 @@ class ViewController: UIViewController {
             return false
         }
         
-        // 计算嘴的宽度和高度比例，判断是否微笑
+        // 计算嘴的宽度和高度比例，判断是否皱眉
         let mouthWidth = self.distance(from: leftMouthCorner, to: rightMouthCorner)
         let mouthHeight = self.distance(from: upperLipTop, to: leftMouthCorner)
+        let mouthRatio = mouthHeight / mouthWidth
         
-        // 定义微笑阈值，当嘴巴高度与宽度的比率大于0.3时，认为是微笑
-        return mouthHeight / mouthWidth > 0.3
+        print("Mouth Width: \(mouthWidth), Mouth Height: \(mouthHeight), Ratio: \(mouthRatio)")
+        
+        // 定义皱眉阈值，当嘴巴高度与宽度的比率大于frownThreshold时，认为是皱眉
+        let frownThreshold: CGFloat = 4.5
+        return mouthRatio < frownThreshold
     }
 
     // 计算两点之间的距离
@@ -382,25 +412,26 @@ class ViewController: UIViewController {
         return sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2))
     }
 
-    // 显示微笑检测的UI反馈
-    private func showSmileDetectedUI() {
+    // 显示皱眉检测的UI反馈
+    private func showFrownDetectedUI() {
         self.view.backgroundColor = UIColor.yellow.withAlphaComponent(0.3)
         
-        // 笑脸提示标签
-        let smileLabel = UILabel()
-        smileLabel.text = "😊 微笑检测成功！"
-        smileLabel.textColor = .blue
-        smileLabel.font = UIFont.boldSystemFont(ofSize: 24)
-        smileLabel.textAlignment = .center
-        smileLabel.frame = CGRect(x: 0, y: 0, width: 200, height: 50)
-        smileLabel.center = self.view.center
+        // 皱眉提示标签
+        let frownLabel = UILabel()
+        frownLabel.text = "😠 Frowning Detected！"
+        frownLabel.textColor = .blue
+        frownLabel.font = UIFont.boldSystemFont(ofSize: 24)
+        frownLabel.textAlignment = .center
+        frownLabel.frame = CGRect(x: 0, y: 0, width: 400, height: 50)
+        frownLabel.center = self.view.center
         
-        self.view.addSubview(smileLabel)
+        self.view.addSubview(frownLabel)
         
         // 延迟移除提示标签和恢复背景颜色
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            smileLabel.removeFromSuperview()
+            frownLabel.removeFromSuperview()
             self.view.backgroundColor = UIColor.clear
+            self.isCurrentlyFrowning = false // 重置状态以允许再次检测
         }
     }
 
