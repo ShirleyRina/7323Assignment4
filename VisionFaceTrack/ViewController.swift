@@ -383,29 +383,28 @@ class ViewController: UIViewController {
             return false
         }
         
-        // 获取左嘴角和右嘴角的坐标
         let leftMouthCorner = outerLips.normalizedPoints.first
         let rightMouthCorner = outerLips.normalizedPoints.last
-        
-        // 获取上嘴唇的中间点
         let upperLipTop = outerLips.normalizedPoints[outerLips.pointCount / 2]
         
         guard let leftMouthCorner = leftMouthCorner,
               let rightMouthCorner = rightMouthCorner else {
             return false
         }
+
+        // 计算嘴角的平均高度
+        let averageMouthCornerHeight = (leftMouthCorner.y + rightMouthCorner.y) / 2.0
+        // 计算上唇与嘴角的高度差
+        let heightDifference = upperLipTop.y - averageMouthCornerHeight
+
+        // 设置皱眉的高度差阈值
+        let frownHeightThreshold: CGFloat = -0.05 // 根据实际情况调整
         
-        // 计算嘴的宽度和高度比例，判断是否皱眉
-        let mouthWidth = self.distance(from: leftMouthCorner, to: rightMouthCorner)
-        let mouthHeight = self.distance(from: upperLipTop, to: leftMouthCorner)
-        let mouthRatio = mouthHeight / mouthWidth
-        
-        print("Mouth Width: \(mouthWidth), Mouth Height: \(mouthHeight), Ratio: \(mouthRatio)")
-        
-        // 定义皱眉阈值，当嘴巴高度与宽度的比率大于frownThreshold时，认为是皱眉
-        let frownThreshold: CGFloat = 4.5
-        return mouthRatio < frownThreshold
+        print("Upper Lip Height: \(upperLipTop.y), Average Mouth Corner Height: \(averageMouthCornerHeight), Height Difference: \(heightDifference)")
+
+        return heightDifference < frownHeightThreshold
     }
+
 
     // 计算两点之间的距离
     private func distance(from point1: CGPoint, to point2: CGPoint) -> CGFloat {
